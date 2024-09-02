@@ -1,6 +1,10 @@
 import Login from "./components/auth/login";
 import Register from "./components/auth/register";
 
+
+import GoogleCalendar from './components/GoogleCalendar';
+import Questionnaire from './components/Questionnaire';
+
 import Header from "./components/header";
 import Home from "./components/home";
 
@@ -24,6 +28,14 @@ function App() {
     {
       path: "/home",
       element: <Home />,
+    },
+    {
+      path: "/calendar",
+      element: <GoogleCalendar />,
+    },
+    {
+      path: "/questionnaire",
+      element: <Questionnaire />,
     },
   ];
   let routesElement = useRoutes(routesArray);

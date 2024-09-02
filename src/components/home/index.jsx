@@ -1,11 +1,17 @@
-import React from 'react'
-import { useAuth } from '../../contexts/authContext'
+import React from 'react';
+import { useAuth } from '../../contexts/authContext';
+import GoogleCalendar from '../GoogleCalendar';
 
 const Home = () => {
-    const { currentUser } = useAuth()
+    const { currentUser } = useAuth();
     return (
-        <div className='text-2xl font-bold pt-14'>Hello {currentUser.displayName ? currentUser.displayName : currentUser.email}, you are now logged in.</div>
-    )
-}
+        <div>
+            <div className='text-2xl font-bold pt-14'>
+                {currentUser.displayName ? currentUser.displayName : currentUser.email}'s Calendar
+            </div>
+            <GoogleCalendar /> {/* Integrate the GoogleCalendar component here */}
+        </div>
+    );
+};
 
-export default Home
+export default Home;
