@@ -57,15 +57,15 @@ const GoogleCalendar = () => {
 
     const initClient = () => {
         gapi.client.init({
-            apiKey: 'AIzaSyDPCwZQ1ogpJyWhyKtSL2Bg9MjGoi45Mc0',
-            clientId: '809093591150-ernrvkc2ccpm8lthjhsb76n468qqcmjn.apps.googleusercontent.com',
+            apiKey: process.env.REACT_APP_GOOGLE_API_KEY,
+            clientId: process.env.REACT_APP_GOOGLE_CLIENT_ID,
             discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest"],
             scope: "https://www.googleapis.com/auth/calendar.events.readonly"
         }).then(() => {
             gapi.auth2.getAuthInstance().isSignedIn.listen(updateSigninStatus);
             updateSigninStatus(gapi.auth2.getAuthInstance().isSignedIn.get());
         });
-    };
+    };    
 
     const updateSigninStatus = (isSignedIn) => {
         if (isSignedIn) {
