@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, momentLocalizer } from 'react-big-calendar';
+import { useAuth } from '../contexts/authContext';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
-import { getFirestore, collection, addDoc, getDocs, query, doc, getDoc, deleteDoc, updateDoc, orderBy } from "firebase/firestore";
+import { getFirestore, collection, addDoc, getDocs, query, doc, getDoc, deleteDoc, limit, updateDoc, orderBy } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { gapi } from 'gapi-script';
 import './App.css';
@@ -33,10 +34,38 @@ const GoogleCalendar = () => {
     const [startTime, setStartTime] = useState(null);
     const [endTime, setEndTime] = useState(null);
 
+    const [displayName, setDisplayName] = useState('');
+    const { currentUser } = useAuth();
     const db = getFirestore();
     const auth = getAuth();
 
     const [elapsedTime, setElapsedTime] = useState(0);
+
+    useEffect(() => {
+        const fetchDisplayName = async () => {
+            if (currentUser.displayName) {
+                setDisplayName(currentUser.displayName);
+            } else {
+                try {
+                    const userRef = doc(db, 'users', currentUser.uid);
+                    const userSnap = await getDoc(userRef);
+                    if (userSnap.exists()) {
+                        const userData = userSnap.data();
+                        setDisplayName(userData.name || currentUser.email);
+                    } else {
+                        setDisplayName(currentUser.email);
+                    }
+                } catch (error) {
+                    console.error('Error fetching user data from Firestore:', error);
+                    setDisplayName(currentUser.email);
+                }
+            }
+        };
+
+        if (currentUser) {
+            fetchDisplayName();
+        }
+    }, [currentUser, db]);
 
     useEffect(() => {
         let interval = null;
@@ -135,8 +164,8 @@ const GoogleCalendar = () => {
         try {
             const user = auth.currentUser;
             if (user) {
-                const eventsQuery = query(collection(db, "users", user.uid, "events"));
-                const tasksQuery = query(collection(db, "users", user.uid, "tasks"));
+                const eventsQuery = query(collection(db, "users", user.uid, "events"), limit(1000));
+                const tasksQuery = query(collection(db, "users", user.uid, "tasks"), limit(1000));
     
                 const [eventsSnapshot, tasksSnapshot] = await Promise.all([
                     getDocs(eventsQuery),
@@ -195,39 +224,64 @@ const GoogleCalendar = () => {
             const user = auth.currentUser;
             if (user) {
                 if (eventDetails.isTask) {
-                    // If it's a task, recalculate the times using the scheduleTask logic
-                    if (!startDate || !deadline) {
-                        console.error("Start date or deadline is missing");
+                    if (!startDate || !deadline || !taskDuration) {
+                        console.error("Start date, deadline, or task duration is missing");
                         return;
                     }
     
-                    // Calculate end time based on the updated duration
-                    const duration = parseInt(taskDuration, 10);
-                    const start = new Date(startDate);
-                    const end = new Date(deadline);
-                    const startTime = start;
-                    const endTime = new Date(startTime.getTime() + duration * 60000);
+                    const durationInMinutes = parseInt(taskDuration, 10);
+                    const newStartTime = new Date(startDate);
+                    const newEndTime = new Date(newStartTime.getTime() + durationInMinutes * 60000);
     
-                    if (endTime > end) {
-                        console.error("Task duration exceeds deadline");
+                    const deadlineDate = new Date(deadline);
+                    if (deadlineDate <= newStartTime) {
+                        console.error("The deadline must be after the start time");
+                        alert("The deadline must be after the start time.");
                         return;
                     }
     
+                    const eventsQuery = query(collection(db, "users", user.uid, "events"));
+                    const tasksQuery = query(collection(db, "users", user.uid, "tasks"));
+    
+                    const [eventsSnapshot, tasksSnapshot] = await Promise.all([
+                        getDocs(eventsQuery),
+                        getDocs(tasksQuery)
+                    ]);
+    
+                    const allExistingItems = [...eventsSnapshot.docs, ...tasksSnapshot.docs].map(doc => ({
+                        start: new Date(doc.data().start.seconds * 1000),
+                        end: new Date(doc.data().end.seconds * 1000)
+                    }));
+    
+                    allExistingItems.sort((a, b) => a.start - b.start);
+    
+                    let adjustedStartTime = newStartTime;
+                    let adjustedEndTime = newEndTime;
+    
+                    for (let item of allExistingItems) {
+                        if (adjustedEndTime > item.start && adjustedStartTime < item.end) {
+                            adjustedStartTime = item.end;
+                            adjustedEndTime = new Date(adjustedStartTime.getTime() + durationInMinutes * 60000);
+                        }
+                    }
+    
+                    const taskDoc = doc(db, "users", user.uid, "tasks", eventDetails.id);
                     const updatedTask = {
                         summary: taskName,
                         description: taskDescription,
                         priority: taskPriority,
-                        start: startTime,
-                        end: endTime,
+                        start: adjustedStartTime,
+                        end: adjustedEndTime,
                         isTask: true,
                     };
     
-                    // Update the task in the "tasks" collection in Firebase
-                    const taskDoc = doc(db, "users", user.uid, "tasks", eventDetails.id);
                     await updateDoc(taskDoc, updatedTask);
-                    console.log("Task updated:", updatedTask);
+                    console.log("Task updated to avoid overlap:", updatedTask);
+    
+                    fetchEventsAndTasks();
+                    setShowPopup(false);
+                    setShowTaskPopup(false);
                 } else {
-                    // If it's an event, update it as usual
                     const eventDoc = doc(db, "users", user.uid, "events", eventDetails.id);
                     const updatedEvent = {
                         summary: eventDetails.summary,
@@ -237,23 +291,16 @@ const GoogleCalendar = () => {
                         priority: eventDetails.priority,
                     };
     
-                    // Update the event in the "events" collection in Firebase
                     await updateDoc(eventDoc, updatedEvent);
-                    console.log("Event updated:", updatedEvent);
+                    fetchEventsAndTasks();
+                    setShowPopup(false);
+                    setShowTaskPopup(false);
                 }
-    
-                // Refresh the events and tasks to display on the calendar
-                fetchEventsAndTasks();
-    
-                // Close the popup
-                setShowPopup(false);
-                setShowTaskPopup(false);
             }
         } catch (error) {
             console.error("Error updating event/task:", error);
         }
-    };
-        
+    };  
 
     const resetStopwatch = () => {
         setIsRunning(false);
@@ -334,9 +381,15 @@ const GoogleCalendar = () => {
                     isTask: eventDetails.isTask,
                     priority: eventDetails.priority,
                 };
-
+    
+                // Add the new event to Firestore
                 await addDoc(collection(db, "users", user.uid, "events"), event);
                 console.log("Event added:", event);
+    
+                // After adding the event, check for overlaps with any existing tasks
+                await handleTaskOverlaps(event.start, event.end);
+    
+                // Refresh the events and tasks to display on the calendar
                 fetchEventsAndTasks();
                 setShowPopup(false);
                 setShowTaskPopup(false);
@@ -345,26 +398,112 @@ const GoogleCalendar = () => {
             console.error("Error adding event/task:", error);
         }
     };
+    
+    const handleTaskOverlaps = async (eventStart, eventEnd) => {
+        const user = auth.currentUser;
+        if (user) {
+            try {
+                // Fetch existing tasks from Firestore
+                const tasksQuery = query(collection(db, "users", user.uid, "tasks"));
+                const tasksSnapshot = await getDocs(tasksQuery);
+    
+                const existingTasks = tasksSnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data(),
+                    start: new Date(doc.data().start.seconds * 1000),
+                    end: new Date(doc.data().end.seconds * 1000)
+                }));
+    
+                // Find tasks that overlap with the new event
+                const overlappingTasks = existingTasks.filter(task => 
+                    task.start < eventEnd && task.end > eventStart
+                );
+    
+                // If there are overlapping tasks, move them to the next available time slot
+                if (overlappingTasks.length > 0) {
+                    for (let task of overlappingTasks) {
+                        let newStartTime = eventEnd; // Start right after the event ends
+                        let newEndTime = new Date(newStartTime.getTime() + (task.end - task.start));
+    
+                        // Ensure no overlap with any other existing events or tasks
+                        const eventsQuery = query(collection(db, "users", user.uid, "events"));
+                        const eventsSnapshot = await getDocs(eventsQuery);
+                        const allEvents = eventsSnapshot.docs.map(doc => ({
+                            start: new Date(doc.data().start.seconds * 1000),
+                            end: new Date(doc.data().end.seconds * 1000)
+                        }));
+    
+                        allEvents.sort((a, b) => a.start - b.start); // Sort by start time
+    
+                        // Adjust task timing if it overlaps with another event
+                        for (let event of allEvents) {
+                            if (newEndTime > event.start && newStartTime < event.end) {
+                                // Move task start time to the end of the event
+                                newStartTime = event.end;
+                                newEndTime = new Date(newStartTime.getTime() + (task.end - task.start));
+                            }
+                        }
+    
+                        // Update the task in Firestore with the new time
+                        const taskRef = doc(db, "users", user.uid, "tasks", task.id);
+                        await updateDoc(taskRef, {
+                            start: newStartTime,
+                            end: newEndTime
+                        });
+                        console.log("Task rescheduled:", task.id, "to new start time:", newStartTime);
+                    }
+                }
+            } catch (error) {
+                console.error("Error handling task overlaps:", error);
+            }
+        }
+    };    
 
     const scheduleTask = async () => {
         try {
             const user = auth.currentUser;
             if (user) {
-                // Ensure startDate and deadline are valid
-                if (!startDate || !deadline) {
-                    console.error("Start date or deadline is missing");
+                if (!taskDuration || !deadline) {
+                    console.error("Task duration or deadline is missing");
                     return;
                 }
     
-                // Calculate end time based on the duration
-                const duration = parseInt(taskDuration, 10);
-                const start = new Date(startDate);
-                const end = new Date(deadline);
-                const startTime = start;
-                const endTime = new Date(startTime.getTime() + duration * 60000);
+                const durationInMinutes = parseInt(taskDuration, 10);
+                if (isNaN(durationInMinutes) || durationInMinutes <= 0) {
+                    console.error("Invalid task duration");
+                    return;
+                }
     
-                if (endTime > end) {
-                    console.error("Task duration exceeds deadline");
+                const currentTime = new Date();
+    
+                const eventsQuery = query(collection(db, "users", user.uid, "events"));
+                const tasksQuery = query(collection(db, "users", user.uid, "tasks"));
+    
+                const [eventsSnapshot, tasksSnapshot] = await Promise.all([
+                    getDocs(eventsQuery),
+                    getDocs(tasksQuery)
+                ]);
+    
+                const existingItems = [...eventsSnapshot.docs, ...tasksSnapshot.docs].map(doc => ({
+                    start: new Date(doc.data().start.seconds * 1000),
+                    end: new Date(doc.data().end.seconds * 1000)
+                }));
+    
+                let nextAvailableStartTime = currentTime;
+                let nextAvailableEndTime = new Date(nextAvailableStartTime.getTime() + durationInMinutes * 60000);
+    
+                existingItems.sort((a, b) => a.start - b.start);
+                for (let item of existingItems) {
+                    if (nextAvailableEndTime > item.start && nextAvailableStartTime < item.end) {
+                        nextAvailableStartTime = item.end;
+                        nextAvailableEndTime = new Date(nextAvailableStartTime.getTime() + durationInMinutes * 60000);
+                    }
+                }
+    
+                const deadlineDate = new Date(deadline);
+                if (deadlineDate <= nextAvailableStartTime) {
+                    console.error("The deadline must be after the start time");
+                    alert("The deadline must be after the start time.");
                     return;
                 }
     
@@ -372,26 +511,19 @@ const GoogleCalendar = () => {
                     summary: taskName,
                     description: taskDescription,
                     priority: taskPriority,
-                    start: startTime,
-                    end: endTime,
-                    isTask: true,  // Ensure isTask is set to true when creating a task
+                    start: nextAvailableStartTime,
+                    end: nextAvailableEndTime,
+                    isTask: true,
                 };
     
-                // Add the task to the "tasks" sub-collection in Firebase
                 await addDoc(collection(db, "users", user.uid, "tasks"), task);
-                console.log("Task scheduled:", task);
-    
-                // Refresh the events and tasks to display on the calendar
                 fetchEventsAndTasks();
-    
-                // Close the popup
                 setShowTaskPopup(false);
             }
         } catch (error) {
             console.error("Error scheduling task:", error);
         }
-    };
-      
+    };      
 
     const handleDateClick = (date) => {
         const currentTime = moment().format('YYYY-MM-DDTHH:mm');
@@ -525,14 +657,27 @@ const GoogleCalendar = () => {
 
     return (
         <div>
+            <div className="calendar-container">
+                <h2 className="press-start-2p-heading">
+                    {displayName}'s Calendar
+                </h2>
+                <div className="cube">
+                    <div className="face front"></div>
+                    <div className="face back"></div>
+                    <div className="face left"></div>
+                    <div className="face right"></div>
+                    <div className="face top"></div>
+                    <div className="face bottom"></div>
+                </div>
             {/* Sync With Google Calendar Button */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
-                <button onClick={() => gapi.auth2.getAuthInstance().signIn()}>
+                <button className="button button-sync" onClick={() => gapi.auth2.getAuthInstance().signIn()}>
                     Sync With Google Calendar
                 </button>
             </div>
 
-            <button onClick={() => {
+            {/* See Completed Tasks Button */}
+            <button className="button button-completed-tasks" onClick={() => {
                 fetchCompletedTasks();
                 setShowCompletedTasksPopup(true);
             }}>
@@ -542,7 +687,8 @@ const GoogleCalendar = () => {
             {/* Add Button with Dropdown */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
                 <div className="dropdown">
-                    <button className="dropbtn">Add &#9662;</button>
+                    <button className="button button-add dropbtn">
+                        Add &#9662;</button>
                     <div className="dropdown-content">
                         <a href="#!" onClick={() => {
                             const currentTime = moment().format('YYYY-MM-DDTHH:mm');
@@ -639,7 +785,9 @@ const GoogleCalendar = () => {
                         value={eventDetails.end}
                         onChange={handleInputChange}
                     />
-                    <button onClick={eventDetails.id ? updateEventOrTask : addEvent}>
+                    <button 
+                        className="save"
+                        onClick={eventDetails.id ? updateEventOrTask : addEvent}>
                         {eventDetails.id ? "Save Changes" : "Create Event"}
                     </button>
                     {eventDetails.id && (
@@ -651,11 +799,9 @@ const GoogleCalendar = () => {
 
                         </>
                     )}
-                    <button onClick={closePopup}>Cancel</button>
+                    <button className="cancel" onClick={closePopup}>Cancel</button>
                 </div>
             )}
-
-
 
             {showTaskPopup && (
                 <div className="popup">
@@ -690,15 +836,17 @@ const GoogleCalendar = () => {
                         type="datetime-local"
                         placeholder="Earliest Start Time"
                         value={startDate}
+                        min={new Date().toISOString().slice(0, 16)} // Set minimum to current date/time
                         onChange={(e) => setStartDate(e.target.value)}
                     />
                     <input
                         type="datetime-local"
                         placeholder="Deadline"
                         value={deadline}
+                        min={startDate} // Ensure deadline is after the start time
                         onChange={(e) => setDeadline(e.target.value)}
                     />
-                    <button onClick={eventDetails.id ? updateEventOrTask : scheduleTask}>
+                    <button className="save" onClick={eventDetails.id ? updateEventOrTask : scheduleTask}>
                         {eventDetails.id ? "Save Changes" : "Schedule Task"}
                     </button>
                     {eventDetails.id && (
@@ -710,10 +858,9 @@ const GoogleCalendar = () => {
                             <button onClick={markTaskAsComplete}>Mark as Complete</button>
                         </>
                     )}
-                    <button onClick={closePopup}>Cancel</button>
+                    <button className = "cancel" onClick={closePopup}>Cancel</button>
                 </div>
             )}
-
 
             <Calendar
                 localizer={localizer}
@@ -745,28 +892,30 @@ const GoogleCalendar = () => {
                 ))}
             </div>
             <br /> */}
-            <div style={{ marginTop: '20px' }}>
-                <h2><b>Start Productivity Session</b></h2>
-                <div>
-                    {isRunning ? `Elapsed Time: ${Math.floor(elapsedTime / 60)}m ${elapsedTime % 60}s` : `Total Time: ${Math.floor(elapsedTime / 60)}m ${elapsedTime % 60}s`}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <button onClick={startStopwatch} disabled={isRunning}>
-                        Start
-                    </button>
-                    <button onClick={stopStopwatch} disabled={!isRunning}>
-                        Stop
-                    </button>
-                    <button onClick={resetStopwatch} disabled={isRunning}>
-                        Reset
-                    </button>
-                    <div>
-                        {isRunning ? "Stopwatch is running..." : "Stopwatch is stopped."}
-                    </div>
-                </div>
-                <p>*It is recommended to start a session when working. Productivity sessions are used to understand times of increased individual productivity and better create schedules.</p>
-                <br />
+            <div style={{ marginTop: '20px', textAlign: 'center' }}>
+            <h2 className="title"><b>Start Productivity Session</b></h2>
+            <div style={{ marginBottom: '10px', fontSize: '18px', fontWeight: 'bold' }}>
+                {isRunning ? `Elapsed Time: ${Math.floor(elapsedTime / 60)}m ${elapsedTime % 60}s` : `Total Time: ${Math.floor(elapsedTime / 60)}m ${elapsedTime % 60}s`}
             </div>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', marginBottom: '10px' }}>
+                <button className="jelly-button start" onClick={startStopwatch} disabled={isRunning}>
+                    Start
+                </button>
+                <button className="jelly-button stop" onClick={stopStopwatch} disabled={!isRunning}>
+                    Stop
+                </button>
+                <button className="jelly-button reset" onClick={resetStopwatch} disabled={isRunning}>
+                    Reset
+                </button>
+            </div>
+            <div style={{ fontSize: '16px', color: '#555' }}>
+                {isRunning ? "Stopwatch is running..." : "Stopwatch is stopped."}
+            </div>
+            <p style={{ marginTop: '20px', color: '#777' }}>
+                It is recommended to start a session when working. Productivity sessions are used to understand times of increased individual productivity and are used to better create schedules.
+            </p>
+        </div>
+        </div>
         </div>
     );
 };

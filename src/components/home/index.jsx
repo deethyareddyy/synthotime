@@ -7,7 +7,7 @@ const Home = () => {
     return (
         <div>
             <div className='text-2xl font-bold pt-14'>
-                {currentUser.displayName ? currentUser.displayName : currentUser.email}'s Calendar
+                {/* {currentUser.displayName ? currentUser.displayName : currentUser.email}'s Calendar */}
             </div>
             <GoogleCalendar /> {/* Integrate the GoogleCalendar component here */}
         </div>

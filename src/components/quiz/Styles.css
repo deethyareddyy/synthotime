@@ -1,0 +1,133 @@
+/* Styles.css */
+
+/* Container for the quiz and animations */
+.quiz-container {
+    position: relative;
+    width: 100%;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* Pixelation overlay effect */
+.pixelation {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.8);
+    z-index: 1;
+    filter: pixelate(10px); /* You might need to use a different method or library for pixelation */
+}
+
+/* Whiteboard style */
+.whiteboard {
+    position: relative;
+    z-index: 2;
+}
+
+/* Desk with study materials */
+.desk {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    display: flex;
+    justify-content: space-around;
+    padding: 10px;
+    z-index: 2;
+}
+
+/* Study materials on the desk */
+.item {
+    width: 50px;
+    height: 50px;
+    background-size: cover;
+}
+
+.cup { background-image: url('path/to/cup.png'); }
+.computer { background-image: url('path/to/computer.png'); }
+.lamp { background-image: url('path/to/lamp.png'); }
+.notebook { background-image: url('path/to/notebook.png'); }
+
+/* Shapes animation */
+.shapes-animation {
+    position: absolute;
+    top: 10%;
+    left: 10%;
+    width: 100%;
+    height: 50%;
+    z-index: 2;
+}
+
+.shape {
+    position: absolute;
+    width: 50px;
+    height: 50px;
+}
+
+.circle { background: blue; border-radius: 50%; }
+.square { background: red; }
+.triangle {
+    width: 0; 
+    height: 0; 
+    border-left: 25px solid transparent;
+    border-right: 25px solid transparent;
+    border-bottom: 50px solid green;
+}
+
+/* Paper airplanes animation */
+.paper-airplanes {
+    position: absolute;
+    top: 20%;
+    width: 100%;
+    height: 20%;
+    z-index: 2;
+}
+
+.paper-airplane {
+    position: absolute;
+    width: 50px;
+    height: 30px;
+    background: url('path/to/paper-airplane.png');
+    background-size: cover;
+    animation: fly 10s linear infinite;
+}
+
+.paper-airplane:nth-child(1) {
+    top: 10%;
+    animation-duration: 8s;
+}
+
+.paper-airplane:nth-child(2) {
+    top: 40%;
+    animation-duration: 12s;
+}
+
+/* Dotted line animation */
+.dotted-line {
+    position: absolute;
+    width: 100%;
+    height: 2px;
+    background: repeating-linear-gradient(90deg, transparent, transparent 4px, black 4px, black 6px);
+    animation: dash 2s linear infinite;
+}
+
+@keyframes dash {
+    from {
+        background-position: 0 0;
+    }
+    to {
+        background-position: 100% 0;
+    }
+}
+
+/* Animation for paper airplanes */
+@keyframes fly {
+    0% {
+        transform: translateX(-100px) translateY(0);
+    }
+    100% {
+        transform: translateX(100vw) translateY(100px);
+    }
+}

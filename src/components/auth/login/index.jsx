@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Navigate, Link } from 'react-router-dom'
 import { doSignInWithEmailAndPassword, doSignInWithGoogle } from '../../../firebase/auth'
 import { useAuth } from '../../../contexts/authContext'
+import '../../../Styles.css';
 
 const Login = () => {
     const { userLoggedIn } = useAuth()
@@ -33,9 +34,21 @@ const Login = () => {
     return (
         <div>
             {userLoggedIn && (<Navigate to={'/home'} replace={true} />)}
+            
+            <div className="background-overlay"></div>
 
-            <main className="w-full h-screen flex self-center place-content-center place-items-center">
-                <div className="w-96 text-gray-600 space-y-5 p-4 shadow-xl border rounded-xl">
+            <div className="left-text">
+            <h2 className="pixelify-sans-heading">Welcome to Synthotime Smartpilot</h2>
+            <p>Struggling to manage your time effectively? Our AI-driven scheduling platform is here to help. 
+            Analyze your habits, prioritize your tasks, and receive personalized schedules tailored to your unique needs. 
+            Experience a stress-free and productive lifestyle with Synthotime Autopilot!</p>
+            </div>
+
+            <main className="w-full h-screen flex items-center justify-end">
+                <div 
+                    className="w-96 text-gray-600 space-y-5 p-4 shadow-xl border rounded-xl absolute top-1/2 transform -translate-y-1/2 left-1/2 transform -translate-x-1/2 mt-5 bg-white"
+                    style={{ left: 'calc(85% - 10rem)' }} 
+                >
                     <div className="text-center">
                         <div className="mt-2">
                             <h3 className="text-gray-800 text-xl font-semibold sm:text-2xl">Welcome</h3>
@@ -109,6 +122,28 @@ const Login = () => {
                     </button>
                 </div>
             </main>
+
+            <div className="floating-clock">
+                <div className="clock-face">
+                    <div className="hand hour-hand"></div>
+                    <div className="hand minute-hand"></div>
+                    <div className="hand second-hand"></div>
+                </div>
+            </div>
+            <div className="jelly1 shape"></div>
+            <div className="jelly2 shape"></div>
+            <div className="jelly3 shape"></div>
+            <div className="square shape"></div>
+            <div className="diamond shape"></div>
+            <div className="oval shape"></div>
+            <div className="triangle shape"></div>
+            <div className="pentagon shape"></div>
+            <div className="hexagon shape"></div>
+            <div className="star shape"></div>
+            <div className="parallelogram shape"></div>
+            <div className="lower-left-shape shape"></div>
+            <div className="trapezoid"></div>
+            <div className="dodecagon"></div>
         </div>
     )
 }
